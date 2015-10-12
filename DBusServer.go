@@ -30,15 +30,16 @@ func ExportToDBus(proc *Process) (*DBusServer, error) {
    path := fmt.Sprintf("/com/firelizzard/teasvc/%d/Server", os.Getpid())
    s.path = dbus.ObjectPath(path)
    
-   ch := make(chan *dbus.Signal, 50)
-   go s.handleSignals(ch)
-   s.bus.Signal(ch)
+   go s.handleSignals()
    
    s.bus.Export(s, s.path, "com.firelizzard.teasvc.Server")
    return s, nil
 }
 
-func (s *DBusServer) handleSignals(ch chan *dbus.Signal) {
+func (s *DBusServer) handleSignals() {
+   ch := make(chan *dbus.Signal, 50)
+   s.bus.Signal(ch)
+   
    for sig := range ch {
       if (sig.Name == "com.firelizzard.teasvc.Ping") {
          err := s.bus.Emit(s.path, "com.firelizzard.teasvc.Pong", s.proc.Description)

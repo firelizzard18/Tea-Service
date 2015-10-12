@@ -33,20 +33,6 @@ const (
    Invalid
 )
 
-func forwardOut(pipe io.Reader, list *ListenerList) {
-   data := make([]byte, 0, 256)
-   for {
-      n, err := pipe.Read(data)
-      if (err != nil) {
-         panic(err)
-      }
-
-      for node := range list.Traverse() {
-         node.sink <- data[:n]
-      }
-   }
-}
-
 func StartProcess(name string, desc string, arg ...string) (p *Process, err error) {
    p = new(Process)
    p.cmd = exec.Command(name, arg...)
@@ -76,15 +62,29 @@ func StartProcess(name string, desc string, arg ...string) (p *Process, err erro
    p.outListeners = NewListenerList()
    p.errListeners = NewListenerList()
 
-   go forwardOut(p.outPipe, p.outListeners)
-   go forwardOut(p.errPipe, p.errListeners)
+   go p.forwardOut(p.outPipe, p.outListeners)
+   go p.forwardOut(p.errPipe, p.errListeners)
 
    // do something about input
    
    return
 }
 
-func forwardOutPipe(w *os.File, node *ListenerNode) {
+func (p *Process) forwardOut(pipe io.Reader, list *ListenerList) {
+   data := make([]byte, 0, 256)
+   for {
+      n, err := pipe.Read(data)
+      if (err != nil) {
+         panic(err)
+      }
+
+      for node := range list.Traverse() {
+         node.sink <- data[:n]
+      }
+   }
+}
+
+func (p *Process) forwardOutPipe(w *os.File, node *ListenerNode) {
    var n int
    var err error
    
@@ -106,30 +106,7 @@ outer:
    return
 }
 
-func (p *Process) RequestOutput(otype OutputType) (*os.File, error) {
-   if (otype >= Invalid) {
-      return nil, errors.New("Invalid output type")
-   }
-   
-   outRead, outWrite, err := os.Pipe()
-   if (err != nil) {
-      return nil, err
-   }
-   
-   if otype == Output || otype == OutAndErr {
-      node := p.outListeners.Append()
-      go forwardOutPipe(outWrite, node)
-   }
-   
-   if otype == Error || otype == OutAndErr {
-      node := p.errListeners.Append()
-      go forwardOutPipe(outWrite, node)
-   }
-   
-   return outRead, nil
-}
-
-func forwardInPipe(r *os.File, c chan []byte) {
+func (p *Process) forwardInPipe(r *os.File, c chan []byte) {
    var n int
    var err error
    
@@ -146,6 +123,29 @@ func forwardInPipe(r *os.File, c chan []byte) {
    log.Print(err)
    close(c)
    return
+}
+
+func (p *Process) RequestOutput(otype OutputType) (*os.File, error) {
+   if (otype >= Invalid) {
+      return nil, errors.New("Invalid output type")
+   }
+   
+   outRead, outWrite, err := os.Pipe()
+   if (err != nil) {
+      return nil, err
+   }
+   
+   if otype == Output || otype == OutAndErr {
+      node := p.outListeners.Append()
+      go p.forwardOutPipe(outWrite, node)
+   }
+   
+   if otype == Error || otype == OutAndErr {
+      node := p.errListeners.Append()
+      go p.forwardOutPipe(outWrite, node)
+   }
+   
+   return outRead, nil
 }
 
 func (p *Process) RequestCommand(otype OutputType) (*os.File, *os.File, error) {
@@ -174,7 +174,7 @@ func (p *Process) RequestCommand(otype OutputType) (*os.File, *os.File, error) {
       return nil, nil, err
    }
 
-   go forwardInPipe(inRead, c)
+   go p.forwardInPipe(inRead, c)
    
    return inWrite, outRead, nil
 }
