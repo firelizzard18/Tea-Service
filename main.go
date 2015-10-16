@@ -8,6 +8,8 @@ import (
    "errors"
 )
 
+var devNull *os.File
+
 /* ----- General Options ----- */
 
 var genops = goopt.NewOptionSet()
@@ -32,9 +34,21 @@ var asDaemon = serops.
             Names("foreground").
          AsFlag(false)
 
+var description = serops.
+         DefineOption("description", "service description as presented to clients").
+            ShortNames('d').
+            Names("desc", "description").
+         AsString("")
+
 var inSrc, outDest, errDest *os.File
 
 func initServerModeOptions() {
+   var err error
+   devNull, err = os.Open(os.DevNull)
+   if err != nil {
+      log.Fatal(err)
+   }
+   
    serops.DefineOption("input", "standard input source").
             ShortNames('i').
             Names("input").
@@ -42,7 +56,7 @@ func initServerModeOptions() {
          DefineAlternate("standard input file").
             ShortNames('I').
             Names("input-file").
-            Required().
+            MutuallyExclusiveWithAlternates(true).
             ProcessAsFile(&inSrc, false, fileErrorHandler)
    
    serops.DefineOption("output", "standard output source").
@@ -52,7 +66,7 @@ func initServerModeOptions() {
          DefineAlternate("standard output file").
             ShortNames('O').
             Names("output-file").
-            Required().
+            MutuallyExclusiveWithAlternates(true).
             ProcessAsFile(&outDest, true, fileErrorHandler)
    
    serops.DefineOption("error", "standard error source").
@@ -62,7 +76,7 @@ func initServerModeOptions() {
          DefineAlternate("standard error file").
             ShortNames('E').
             Names("error-file").
-            Required().
+            MutuallyExclusiveWithAlternates(true).
             ProcessAsFile(&errDest, true, fileErrorHandler)
 }
 
@@ -79,12 +93,9 @@ func parseFileOpt(std *os.File, ptr **os.File) goopt.Processor {
       
       switch input {
       case "std":
-         *ptr = os.Stdin
+         *ptr = std
       case "null":
-//         return parseOptOpenFile(ptr)(o, os.DevNull)
-          return func (_ *goopt.Option, _ string) error {
-             *ptr = nil
-          }()
+         *ptr = devNull
       default:
          return errors.New("'" + input + "' is not a supported input source")
       }
@@ -102,6 +113,12 @@ var list = cliops.
             Names("ls", "list", "list-servers").
          AsFlag(false)
 
+var timeout = cliops.
+         DefineOption("list-timeout", "timeout for listing available servers").
+            ShortNames('t').
+            Names("timeout").
+         AsInt(100)
+
 
 /* ----- Main ----- */
 
@@ -114,7 +131,7 @@ func usageAndExit(err error) {
 }
 
 func main() {
-   for _, arg := os.Args {
+   for _, arg := range os.Args {
       if arg == "--" {
          mainServer()
          return
@@ -123,16 +140,52 @@ func main() {
    mainClient()
 }
 
+func validateHandle(ptr **os.File, std *os.File) {
+   if *ptr == devNull {
+      *ptr = nil
+   } else if !*asDaemon && *ptr == nil {
+      *ptr = std
+   }
+}
+
 func mainServer() {
    opts := goopt.MergeSets(genops, serops)
    args, err := opts.Parse(os.Args)
-   if err != nil || len(args) < 1 {
+   if err != nil || len(args) < 2 || args[0] != "--" {
       usageAndExit(err)
    }
    
-   proc, err2 := StartProcess(args[0], "What the fuck is the description?", args[1:])
-   if err2 != nil {
-      usageAndExit(err2)
+   if *asDaemon {
+      log.Fatal("Golang does not support daemonization")
+   }
+   
+   validateHandle(&inSrc, os.Stdin)
+   validateHandle(&outDest, os.Stdout)
+   validateHandle(&errDest, os.Stderr)
+   
+   proc, err := StartProcess(args[1], *description, *bus, args[2:]...)
+   if err != nil {
+      log.Fatal(err)
+   }
+   
+   if inSrc != nil {
+      err := proc.ConnectInput(inSrc)
+      if err != nil {
+         panic(err)
+      }
+   }
+   
+   if outDest != nil {
+      proc.ConnectOutput(outDest)
+   }
+   
+   if errDest != nil {
+      proc.ConnectError(errDest)
+   }
+   
+   err = proc.cmd.Run()
+   if err != nil {
+      log.Fatal(err)
    }
 }
 
@@ -141,5 +194,15 @@ func mainClient() {
    args, err := opts.Parse(os.Args)
    if err != nil || len(args) > 0 {
       usageAndExit(err)
+   }
+   
+   client, err := ConnectToDBus(*bus)
+   if err != nil {
+      log.Fatal(err)
+   }
+   
+   if *list {
+      client.ListServers(*timeout)
+      return
    }
 }

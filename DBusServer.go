@@ -14,12 +14,22 @@ type DBusServer struct {
    bus *dbus.Conn
 }
 
-func ExportToDBus(proc *Process) (*DBusServer, error) {
+func ExportToDBus(proc *Process, bus string) (*DBusServer, error) {
    s := new(DBusServer)
    s.proc = proc
    
    var err error
-   s.bus, err = dbus.SessionBus()
+   switch bus {
+   case "session":
+      s.bus, err = dbus.SessionBus()
+      
+   case "system":
+      s.bus, err = dbus.SystemBus()
+      
+   default:
+      s.bus, err = dbus.Dial(bus)
+   }
+   
    if err != nil {
       return nil, err
    }

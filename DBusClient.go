@@ -5,9 +5,12 @@ import (
    "errors"
    "github.com/godbus/dbus"
    "os"
+   "log"
+   "fmt"
 )
 
-type empty struct{}
+type empty struct {}
+
 type ServerInfo struct {
    Path dbus.ObjectPath
    Description string
@@ -15,15 +18,25 @@ type ServerInfo struct {
 
 type DBusClient struct {
    bus *dbus.Conn
-   
-   siglock chan empty
+   path dbus.ObjectPath
+   sigchans map[string](chan *dbus.Signal)
 }
 
-func ConnectToDBus() (*DBusClient, error) {
+func ConnectToDBus(bus string) (*DBusClient, error) {
    c := new(DBusClient)
    
    var err error
-   c.bus, err = dbus.SessionBus()
+   switch bus {
+   case "session":
+      c.bus, err = dbus.SessionBus()
+      
+   case "system":
+      c.bus, err = dbus.SystemBus()
+      
+   default:
+      c.bus, err = dbus.Dial(bus)
+   }
+   
    if err != nil {
       return nil, err
    }
@@ -31,41 +44,59 @@ func ConnectToDBus() (*DBusClient, error) {
       return nil, errors.New("DBus connection does not support file descriptors")
    }
    
-   c.siglock = make(chan empty, 1)
-   c.siglock <- empty{}
+   path := fmt.Sprintf("/com/firelizzard/teasvc/%d/Client", os.Getpid())
+   c.path = dbus.ObjectPath(path)
+   
+   c.sigchans = make(map[string](chan *dbus.Signal))
+   chsig := make(chan *dbus.Signal, 10)
+   
+   go func() {
+      for {
+         sig := <-chsig
+         ch, ok := c.sigchans[sig.Name]
+         if !ok {
+            log.Print("Unhandled signal: " + sig.Name)
+         }
+         
+         select {
+         case ch <- sig:
+            // sent singal, done
+            
+         default:
+            log.Print("Unhandled signal (full channel): " + sig.Name)
+         }
+      }
+   }()
+   c.bus.Signal(chsig)
    
    return c, nil
 }
 
 func (c *DBusClient) ListServers(timeout int) chan *ServerInfo {
-   <- c.siglock
+   if _, ok := c.sigchans["com.firelizzard.teasvc.Pong"]; ok {
+      panic("This client is already pinging")
+   }
    
    list := make(chan *ServerInfo, 10)
    found := make(map[dbus.ObjectPath]empty)
    
    chsig := make(chan *dbus.Signal, 50)
    chtime := make(chan empty)
-   c.bus.Signal(chsig)
    
    go func() {
       for {
          select {
             case sig := <- chsig:
-               var ok bool
-               
-               if sig.Name != "com.firelizzard.teasvc.Pong" {
-                  continue
-               }
-               
                // if multiple clients simultaneously ping
                // we may receive multiple pongs 
-               if _, ok = found[sig.Path]; ok {
+               if _, ok := found[sig.Path]; ok {
                   continue
                }
                
                server := new(ServerInfo)
                server.Path = sig.Path
                
+               var ok bool
                if len(sig.Body) > 0 {
                   if server.Description, ok = sig.Body[0].(string); !ok {
                      server.Description = "No description"
@@ -77,21 +108,21 @@ func (c *DBusClient) ListServers(timeout int) chan *ServerInfo {
                
             case <- chtime:
                close(list)
-               c.bus.Signal(nil)
                close(chsig)
                close(chtime)
-               c.siglock <- empty{}
+               delete(c.sigchans, "com.firelizzard.teasvc.Pong")
                return
          }
       }
    }()
+   c.sigchans["com.firelizzard.teasvc.Pong"] = chsig
+   c.bus.Emit(c.path, "com.firelizzard.teasvc.Pong")
    
    go func() {
       time.Sleep(time.Duration(timeout) * time.Millisecond)
       chtime <- empty{}
    }()
    
-   c.bus.Signal(chsig)
    return list
 }
 

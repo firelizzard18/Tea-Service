@@ -33,7 +33,7 @@ const (
    Invalid
 )
 
-func StartProcess(name string, desc string, arg ...string) (p *Process, err error) {
+func StartProcess(name string, desc string, bus string, arg ...string) (p *Process, err error) {
    p = new(Process)
    p.cmd = exec.Command(name, arg...)
    p.Description = desc
@@ -53,7 +53,7 @@ func StartProcess(name string, desc string, arg ...string) (p *Process, err erro
       return nil, errors.New("Could not open process stderr: " + err.Error())
    }
 
-   p.exported, err = ExportToDBus(p)
+   p.exported, err = ExportToDBus(p, bus)
    if err != nil {
       return nil, errors.New("Could not open dbus: " + err.Error())
    }
@@ -62,19 +62,19 @@ func StartProcess(name string, desc string, arg ...string) (p *Process, err erro
    p.outListeners = NewListenerList()
    p.errListeners = NewListenerList()
 
-   go p.forwardOut(p.outPipe, p.outListeners)
-   go p.forwardOut(p.errPipe, p.errListeners)
+   go p.forwardCmdReader(p.outPipe, p.outListeners)
+   go p.forwardCmdReader(p.errPipe, p.errListeners)
 
    // do something about input
    
    return
 }
 
-func (p *Process) forwardOut(pipe io.Reader, list *ListenerList) {
+func (p *Process) forwardCmdReader(pipe io.Reader, list *ListenerList) {
    data := make([]byte, 0, 256)
    for {
       n, err := pipe.Read(data)
-      if (err != nil) {
+      if err != nil {
          panic(err)
       }
 
@@ -84,7 +84,31 @@ func (p *Process) forwardOut(pipe io.Reader, list *ListenerList) {
    }
 }
 
-func (p *Process) forwardOutPipe(w *os.File, node *ListenerNode) {
+func (p *Process) forwardFileSource(r *os.File, c chan []byte) {
+   var n int
+   var err error
+   
+   data := make([]byte, 0, 256)
+   for {
+      n, err = r.Read(data)
+      if err != nil {
+         break
+      }
+      
+      c <- data[:n]
+   }
+   
+   log.Print(err)
+   close(c)
+   
+   err = r.Close()
+   if err != nil {
+      log.Print(err)
+   }
+   return
+}
+
+func (p *Process) forwardFileSink(w *os.File, node *ListenerNode) {
    var n int
    var err error
    
@@ -103,26 +127,36 @@ outer:
    log.Print(err)
    node.Remove()
    close(node.sink)
+   
+   err = w.Close()
+   if err != nil {
+      log.Print(err)
+   }
    return
 }
 
-func (p *Process) forwardInPipe(r *os.File, c chan []byte) {
-   var n int
-   var err error
+func (p *Process) ConnectInput(source *os.File) error {
+   c := make(chan []byte)
    
-   data := make([]byte, 0, 256)
-   for {
-      n, err = r.Read(data)
-      if (err != nil) {
-         break
-      }
-      
-      c <- data[:n]
+   select {
+      case p.inProvider <- c:
+         // the channel was successfully sent
+         go p.forwardFileSource(source, c)
+         return nil
+         
+      default:
+         return errors.New("The command interface is occupied")
    }
-   
-   log.Print(err)
-   close(c)
-   return
+}
+
+func (p *Process) ConnectOutput(sink *os.File) {
+   node := p.outListeners.Append()
+   go p.forwardFileSink(sink, node)
+}
+
+func (p *Process) ConnectError(sink *os.File) {
+   node := p.errListeners.Append()
+   go p.forwardFileSink(sink, node)
 }
 
 func (p *Process) RequestOutput(otype OutputType) (*os.File, error) {
@@ -131,52 +165,47 @@ func (p *Process) RequestOutput(otype OutputType) (*os.File, error) {
    }
    
    outRead, outWrite, err := os.Pipe()
-   if (err != nil) {
+   if err != nil {
       return nil, err
    }
    
    if otype == Output || otype == OutAndErr {
-      node := p.outListeners.Append()
-      go p.forwardOutPipe(outWrite, node)
+      p.ConnectOutput(outWrite)
    }
    
    if otype == Error || otype == OutAndErr {
-      node := p.errListeners.Append()
-      go p.forwardOutPipe(outWrite, node)
+      p.ConnectError(outWrite)
    }
    
    return outRead, nil
 }
 
 func (p *Process) RequestCommand(otype OutputType) (*os.File, *os.File, error) {
-   c := make(chan []byte)
-   
-   select {
-      case p.inProvider <- c:
-         // the channel was successfully sent
-         
-      default:
-         return nil, nil, errors.New("The command interface is occupied")
-   }
-   
    var inRead, inWrite, outRead *os.File
    var err error
    
    inRead, inWrite, err = os.Pipe()
-   if (err != nil) {
-      return nil, nil, err
+   if err != nil {
+      goto fail1
    }
    
    outRead, err = p.RequestOutput(otype)
-   if (err != nil) {
-      inRead.Close()
-      inWrite.Close()
-      return nil, nil, err
+   if err != nil {
+      goto fail2
    }
-
-   go p.forwardInPipe(inRead, c)
+   
+   err = p.ConnectInput(inRead)
+   if err != nil {
+      goto fail2
+   }
    
    return inWrite, outRead, nil
+   
+fail2:
+   inRead.Close()
+   inWrite.Close()
+fail1:
+   return nil, nil, err
 }
 
 func (p *Process) SendCommand(otype OutputType, command string) (*os.File, error) {
