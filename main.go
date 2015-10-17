@@ -1,7 +1,6 @@
-package teasvc
+package main
 
 import (
-//   "github.com/firelizzard18/goopt"
    goopt "github.com/firelizzard18/goopt-fluent"
    "os"
    "log"

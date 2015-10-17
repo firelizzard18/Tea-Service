@@ -1,4 +1,4 @@
-package teasvc
+package main
 
 import (
    "io"
