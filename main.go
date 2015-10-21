@@ -5,6 +5,8 @@ import (
    "os"
    "log"
    "errors"
+   "fmt"
+   "strings"
 )
 
 var devNull *os.File
@@ -126,6 +128,12 @@ func init() {
 }
 
 func usageAndExit(err error) {
+   if err == nil {
+      fmt.Print("Usage!")
+   } else {
+      fmt.Print("Usage! " + err.Error())
+   }
+   fmt.Print("\n")
    os.Exit(1)
 }
 
@@ -182,7 +190,7 @@ func mainServer() {
       proc.ConnectError(errDest)
    }
    
-   err = proc.cmd.Run()
+   err = proc.Run()
    if err != nil {
       log.Fatal(err)
    }
@@ -191,8 +199,10 @@ func mainServer() {
 func mainClient() {
    opts := goopt.MergeSets(genops, cliops)
    args, err := opts.Parse(os.Args)
-   if err != nil || len(args) > 0 {
+   if err != nil {
       usageAndExit(err)
+   } else if len(args) > 0 {
+      usageAndExit(errors.New("Unparsed arguments: " + strings.Join(args, " ")))
    }
    
    client, err := ConnectToDBus(*bus)
@@ -200,8 +210,12 @@ func mainClient() {
       log.Fatal(err)
    }
    
-   if *list {
-      client.ListServers(*timeout)
+   if true || *list {
+      for server := range client.ListServers(*timeout) {
+         log.Print(server)
+      }
       return
    }
+
+   usageAndExit(nil)
 }

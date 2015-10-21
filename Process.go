@@ -6,12 +6,13 @@ import (
    "log"
    "os/exec"
    "errors"
-//   "sync"
+   "sync"
 )
 
 type Process struct {
    cmd *exec.Cmd
    exported *DBusServer
+   started *sync.WaitGroup
 
    inPipe io.WriteCloser
    outPipe io.ReadCloser
@@ -36,7 +37,10 @@ const (
 func StartProcess(name string, desc string, bus string, arg ...string) (p *Process, err error) {
    p = new(Process)
    p.cmd = exec.Command(name, arg...)
+   p.started = new(sync.WaitGroup)
    p.Description = desc
+
+   p.started.Add(1)
 
    p.inPipe, err = p.cmd.StdinPipe()
    if err != nil {
@@ -70,7 +74,24 @@ func StartProcess(name string, desc string, bus string, arg ...string) (p *Proce
    return
 }
 
+func (p *Process) Run() (err error) {
+   err = p.cmd.Run()
+   if err == nil {
+      p.started.Done()
+   }
+   return
+}
+
+func (p *Process) Start() (err error) {
+   err = p.cmd.Start()
+   if err == nil {
+      p.started.Done()
+   }
+   return
+}
+
 func (p *Process) forwardCmdReader(pipe io.Reader, list *ListenerList) {
+   p.started.Wait()
    data := make([]byte, 0, 256)
    for {
       n, err := pipe.Read(data)

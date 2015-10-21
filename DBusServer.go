@@ -42,6 +42,12 @@ func ExportToDBus(proc *Process, bus string) (*DBusServer, error) {
    
    go s.handleSignals()
    
+   name := fmt.Sprintf("com.firelizzard.teasvc.Server%d", os.Getpid())
+   _, err = s.bus.RequestName(name, dbus.RequestNameFlags(0))
+   if err != nil {
+      panic(err)
+   }
+   
    s.bus.Export(s, s.path, "com.firelizzard.teasvc.Server")
    return s, nil
 }

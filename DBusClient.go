@@ -116,7 +116,7 @@ func (c *DBusClient) ListServers(timeout int) chan *ServerInfo {
       }
    }()
    c.sigchans["com.firelizzard.teasvc.Pong"] = chsig
-   c.bus.Emit(c.path, "com.firelizzard.teasvc.Pong")
+   c.bus.Emit(c.path, "com.firelizzard.teasvc.Ping")
    
    go func() {
       time.Sleep(time.Duration(timeout) * time.Millisecond)
