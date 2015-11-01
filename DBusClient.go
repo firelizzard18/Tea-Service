@@ -68,6 +68,7 @@ func ConnectToDBus(bus string) (*DBusClient, error) {
       }
    }()
    c.bus.Signal(chsig)
+   c.bus.BusObject().Call("org.freedesktop.DBus.AddMatch", 0, "type='signal',interface='com.firelizzard.teasvc',member='Pong'")
    
    return c, nil
 }
