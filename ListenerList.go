@@ -49,6 +49,19 @@ func (l *ListenerList) Append() *ListenerNode {
    return node
 }
 
+func (n *ListenerNode) Read() chan []byte {
+   out := make(chan []byte)
+
+   go func() {
+      for b := range n.sink {
+         out <- b
+      }
+      close(out)
+   }()
+
+   return out
+}
+
 func (n *ListenerNode) Remove() {
    n.list.lock.Lock()
    defer n.list.lock.Unlock()

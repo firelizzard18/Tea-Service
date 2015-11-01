@@ -28,7 +28,8 @@ type Process struct {
 type OutputType int
 
 const (
-   Output OutputType = iota
+   None OutputType = iota
+   Output
    Error
    OutAndErr
    Invalid
@@ -66,19 +67,10 @@ func StartProcess(name string, desc string, bus string, arg ...string) (p *Proce
    p.outListeners = NewListenerList()
    p.errListeners = NewListenerList()
 
+   go p.forwardCmdWriter(p.inPipe, p.inProvider)
    go p.forwardCmdReader(p.outPipe, p.outListeners)
    go p.forwardCmdReader(p.errPipe, p.errListeners)
-
-   // do something about input
    
-   return
-}
-
-func (p *Process) Run() (err error) {
-   err = p.cmd.Run()
-   if err == nil {
-      p.started.Done()
-   }
    return
 }
 
@@ -90,9 +82,29 @@ func (p *Process) Start() (err error) {
    return
 }
 
+func (p *Process) Wait() error {
+   return p.cmd.Wait()
+}
+
+func (p *Process) forwardCmdWriter(pipe io.Writer, ins chan chan []byte) {
+   p.started.Wait()
+   for in := range ins {
+      for data := range in {
+         totalCount := len(data)
+         for offset := 0; offset < totalCount; {
+            count, err := pipe.Write(data[offset:totalCount])
+            if err != nil {
+               panic(err)
+            }
+            offset += count
+         }
+      }
+   }
+}
+
 func (p *Process) forwardCmdReader(pipe io.Reader, list *ListenerList) {
    p.started.Wait()
-   data := make([]byte, 0, 256)
+   data := make([]byte, 256)
    for {
       n, err := pipe.Read(data)
       if err != nil {
@@ -109,7 +121,7 @@ func (p *Process) forwardFileSource(r *os.File, c chan []byte) {
    var n int
    var err error
    
-   data := make([]byte, 0, 256)
+   data := make([]byte, 256)
    for {
       n, err = r.Read(data)
       if err != nil {
@@ -130,24 +142,25 @@ func (p *Process) forwardFileSource(r *os.File, c chan []byte) {
 }
 
 func (p *Process) forwardFileSink(w *os.File, node *ListenerNode) {
-   var n int
+   var writeCount int
    var err error
-   
+
 outer:
-   for data := range node.sink {
-      s := 0
-      for s < len(data) {
-         n, err = w.Write(data[n:])
+   for data := range node.Read() {
+      _ = "breakpoint"
+      totalCount := len(data)
+      offset := 0
+      for offset < totalCount {
+         writeCount, err = w.Write(data[offset:totalCount])
          if err != nil {
             break outer
          }
-         s += n
+         offset += writeCount
       }
    }
    
    log.Print(err)
    node.Remove()
-   close(node.sink)
    
    err = w.Close()
    if err != nil {
@@ -181,7 +194,7 @@ func (p *Process) ConnectError(sink *os.File) {
 }
 
 func (p *Process) RequestOutput(otype OutputType) (*os.File, error) {
-   if (otype >= Invalid) {
+   if otype == None || otype >= Invalid {
       return nil, errors.New("Invalid output type")
    }
    
@@ -189,7 +202,7 @@ func (p *Process) RequestOutput(otype OutputType) (*os.File, error) {
    if err != nil {
       return nil, err
    }
-   
+
    if otype == Output || otype == OutAndErr {
       p.ConnectOutput(outWrite)
    }
@@ -210,9 +223,11 @@ func (p *Process) RequestCommand(otype OutputType) (*os.File, *os.File, error) {
       goto fail1
    }
    
-   outRead, err = p.RequestOutput(otype)
-   if err != nil {
-      goto fail2
+   if otype != None {
+      outRead, err = p.RequestOutput(otype)
+      if err != nil {
+         goto fail2
+      }
    }
    
    err = p.ConnectInput(inRead)
@@ -229,6 +244,54 @@ fail1:
    return nil, nil, err
 }
 
+// func (p *Process) forwardFileSource(r *os.File, c chan []byte) {
+//    var n int
+//    var err error
+   
+//    data := make([]byte, 256)
+//    for {
+//       n, err = r.Read(data)
+//       if err != nil {
+//          break
+//       }
+      
+//       c <- data[:n]
+//    }
+   
+//    log.Print(err)
+//    close(c)
+   
+//    err = r.Close()
+//    if err != nil {
+//       log.Print(err)
+//    }
+//    return
+// }
+
 func (p *Process) SendCommand(otype OutputType, command string) (*os.File, error) {
-   return nil, errors.New("not implemented")
+   var outRead *os.File
+   var err error
+
+   c := make(chan []byte)
+
+   select {
+   case p.inProvider <- c:
+      // cool, it worked
+
+   default:
+      return nil, errors.New("The command interface is occupied")
+   }
+
+   if otype != None {
+      outRead, err = p.RequestOutput(otype)
+      if err != nil {
+         return nil, err
+      }
+   }
+
+   go func () {
+      c <- []byte(command + "\n")
+   }()
+
+   return outRead, err
 }
