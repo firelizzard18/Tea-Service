@@ -10,14 +10,6 @@ type ListenerList struct {
    tail *ListenerNode
 }
 
-type ListenerNode struct {
-   sink chan []byte
-
-   list *ListenerList
-   prev *ListenerNode
-   next *ListenerNode
-}
-
 func NewListenerList() *ListenerList {
    l := new(ListenerList)
    l.lock = new(sync.RWMutex)
@@ -27,11 +19,7 @@ func NewListenerList() *ListenerList {
 }
 
 func (l *ListenerList) Append() *ListenerNode {
-   node := new(ListenerNode)
-   node.sink = make(chan []byte)
-   node.list = l
-   node.prev = nil
-   node.next = nil
+   node := newListenerNode(l)
 
    l.lock.Lock()
    defer l.lock.Unlock()
@@ -47,41 +35,6 @@ func (l *ListenerList) Append() *ListenerNode {
    node.prev = tail
    l.tail = node
    return node
-}
-
-func (n *ListenerNode) Read() chan []byte {
-   out := make(chan []byte)
-
-   go func() {
-      for b := range n.sink {
-         out <- b
-      }
-      close(out)
-   }()
-
-   return out
-}
-
-func (n *ListenerNode) Remove() {
-   n.list.lock.Lock()
-   defer n.list.lock.Unlock()
-
-   prev := n.prev
-   next := n.next
-
-   if (n.list.head == n) {
-      n.list.head = next
-   } else {
-      prev.next = next
-   }
-
-   if (n.list.tail == n) {
-      n.list.tail = prev
-   } else {
-      next.prev = prev
-   }
-
-   close(n.sink)
 }
 
 func (l *ListenerList) Traverse() chan *ListenerNode {

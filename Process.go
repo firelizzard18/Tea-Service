@@ -8,8 +8,6 @@ import (
    "os/exec"
    "errors"
    "sync"
-   "github.com/firelizzard18/teasvc/listener"
-   "github.com/firelizzard18/teasvc/provider"
 )
 
 type Process struct {
@@ -17,9 +15,9 @@ type Process struct {
    exported *DBusServer
    started *sync.WaitGroup
 
-   inProvider *provider.Provider
-   outListeners *listener.List
-   errListeners *listener.List
+   inProvider *Provider
+   outListeners *ListenerList
+   errListeners *ListenerList
    
    Description string
 }
@@ -52,9 +50,9 @@ func StartProcess(name string, desc string, bus string, arg ...string) (p *Proce
       return nil, errors.New("Could not open dbus: " + err.Error())
    }
    
-   p.inProvider = provider.New()
-   p.outListeners = listener.NewList()
-   p.errListeners = listener.NewList()
+   p.inProvider = New()
+   p.outListeners = NewListenerList()
+   p.errListeners = NewListenerList()
 
    go p.runInputProvider(inPipe, p.inProvider)
    go p.runOutputListener(outPipe, p.outListeners)
@@ -63,12 +61,12 @@ func StartProcess(name string, desc string, bus string, arg ...string) (p *Proce
    return
 }
 
-func (p *Process) runInputProvider(pipe io.Writer, provider *provider.Provider) {
+func (p *Process) runInputProvider(pipe io.Writer, provider *Provider) {
    p.started.Wait()
-   provider.Start(pipe)
+   p.Start(pipe)
 }
 
-func (p *Process) runOutputListener(pipe io.Reader, list *listener.List) {
+func (p *Process) runOutputListener(pipe io.Reader, list *ListenerList) {
    p.started.Wait()
    data := make([]byte, 256)
    for {
@@ -120,7 +118,7 @@ func (p *Process) forwardFileSource(r *os.File, c chan []byte) {
    return
 }
 
-func (p *Process) forwardFileSink(w *os.File, node *listener.Node) {
+func (p *Process) forwardFileSink(w *os.File, node *ListenerNode) {
    var writeCount int
    var err error
 
