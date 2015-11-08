@@ -8,13 +8,6 @@ import (
 	"time"
 )
 
-type empty struct{}
-
-type ServerInfo struct {
-	Sender      string
-	Description string
-}
-
 type DBusClient struct {
 	bus      *dbus.Conn
 	path     dbus.ObjectPath
@@ -81,7 +74,7 @@ func (c *DBusClient) ListServers(timeout int) chan *ServerInfo {
 	}
 
 	list := make(chan *ServerInfo, 10)
-	found := make(map[dbus.ObjectPath]empty)
+	found := make(map[string]empty)
 
 	chsig := make(chan *dbus.Signal, 50)
 	chtime := make(chan empty)
@@ -92,7 +85,7 @@ func (c *DBusClient) ListServers(timeout int) chan *ServerInfo {
 			case sig := <-chsig:
 				// if multiple clients simultaneously ping
 				// we may receive multiple pongs
-				if _, ok := found[sig.Path]; ok {
+				if _, ok := found[sig.Sender]; ok {
 					continue
 				}
 
@@ -108,7 +101,7 @@ func (c *DBusClient) ListServers(timeout int) chan *ServerInfo {
 				}
 
 				list <- server
-				found[sig.Path] = empty{}
+				found[sig.Sender] = empty{}
 
 			case <-chtime:
 				close(list)
@@ -130,50 +123,69 @@ func (c *DBusClient) ListServers(timeout int) chan *ServerInfo {
 	return list
 }
 
-func (c *DBusClient) RequestOutput(dest string, otype OutputType) (*os.File, error) {
+func (c *DBusClient) RequestOutput(dest string, otype OutputType) (outPipe *os.File, err error) {
 	var output dbus.UnixFD
 
 	if dest == "" {
-		return nil, errors.New("Invalid destination")
+		err = errors.New("Invalid destination")
+		return
 	}
 
 	obj := c.bus.Object(dest, "/com/firelizzard/teasvc/Server")
-	err := obj.Call("com.firelizzard.teasvc.Server.RequestOutput", 0, byte(otype)).Store(&output)
+	err = obj.Call("com.firelizzard.teasvc.Server.RequestOutput", 0, byte(otype)).Store(&output)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	return os.NewFile(uintptr(output), "out pipe"), nil
+	if output > -1 {
+		outPipe = os.NewFile(uintptr(output), "out pipe")
+	}
+
+	return
 }
 
-func (c *DBusClient) RequestCommand(dest string, otype OutputType) (*os.File, *os.File, error) {
+func (c *DBusClient) RequestCommand(dest string, otype OutputType) (inPipe *os.File, outPipe *os.File, err error) {
 	var input, output dbus.UnixFD
 
 	if dest == "" {
-		return nil, nil, errors.New("Invalid destination")
+		err = errors.New("Invalid destination")
+		return
 	}
 
 	obj := c.bus.Object(dest, "/com/firelizzard/teasvc/Server")
-	err := obj.Call("com.firelizzard.teasvc.Server.RequestCommand", 0, byte(otype)).Store(&input, &output)
+	err = obj.Call("com.firelizzard.teasvc.Server.RequestCommand", 0, byte(otype)).Store(&input, &output)
 	if err != nil {
-		return nil, nil, err
+		return
 	}
 
-	return os.NewFile(uintptr(input), "in pipe"), os.NewFile(uintptr(output), "out pipe"), nil
+	if input > -1 {
+		inPipe = os.NewFile(uintptr(input), "out pipe")
+	}
+
+	if output > -1 {
+		outPipe = os.NewFile(uintptr(output), "out pipe")
+	}
+
+	return
 }
 
-func (c *DBusClient) SendCommand(dest string, otype OutputType, command string) (*os.File, error) {
+func (c *DBusClient) SendCommand(dest string, otype OutputType, command string) (outPipe *os.File, err error) {
 	var output dbus.UnixFD
 
 	if dest == "" {
-		return nil, errors.New("Invalid destination")
+		err = errors.New("Invalid destination")
+		return
 	}
 
 	obj := c.bus.Object(dest, "/com/firelizzard/teasvc/Server")
-	err := obj.Call("com.firelizzard.teasvc.Server.SendCommand", 0, byte(otype), command).Store(&output)
+	err = obj.Call("com.firelizzard.teasvc.Server.SendCommand", 0, byte(otype), command).Store(&output)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	return os.NewFile(uintptr(output), "out pipe"), nil
+	if output > -1 {
+		outPipe = os.NewFile(uintptr(output), "out pipe")
+	}
+
+	return
 }
