@@ -1,14 +1,18 @@
 package main
 
+
+
 type OutputType int
 
 const (
-   None OutputType = iota
-   Output
-   Error
-   OutAndErr
-   Invalid
+   Output_None OutputType = iota
+   Output_Out
+   Output_Err
+   Output_All
+   Output_Invalid
 )
+
+
 
 type empty struct{}
 

@@ -63,7 +63,7 @@ func StartProcess(name string, desc string, bus string, arg ...string) (p *Proce
 
 func (p *Process) runInputProvider(pipe io.Writer, provider *Provider) {
    p.started.Wait()
-   p.Start(pipe)
+   provider.Start(pipe)
 }
 
 func (p *Process) runOutputListener(pipe io.Reader, list *ListenerList) {
@@ -166,7 +166,7 @@ func (p *Process) ConnectError(sink *os.File) {
 }
 
 func (p *Process) RequestOutput(otype OutputType) (*os.File, error) {
-   if otype == None || otype >= Invalid {
+   if otype == Output_None || otype >= Output_Invalid {
       return nil, errors.New("Invalid output type")
    }
    
@@ -179,11 +179,11 @@ func (p *Process) RequestOutput(otype OutputType) (*os.File, error) {
       outWrite.Close()
    }()
 
-   if otype == Output || otype == OutAndErr {
+   if otype == Output_Out || otype == Output_All {
       p.ConnectOutput(outWrite)
    }
    
-   if otype == Error || otype == OutAndErr {
+   if otype == Output_Err || otype == Output_All {
       p.ConnectError(outWrite)
    }
    
@@ -203,7 +203,7 @@ func (p *Process) RequestCommand(otype OutputType) (*os.File, *os.File, error) {
       inRead.Close()
    }()
    
-   if otype != None {
+   if otype != Output_None {
       outRead, err = p.RequestOutput(otype)
       if err != nil {
          goto fail2
@@ -233,7 +233,7 @@ func (p *Process) SendCommand(otype OutputType, command string) (*os.File, error
          return nil, errors.New("The command interface is occupied")
    }
 
-   if otype != None {
+   if otype != Output_None {
       outRead, err = p.RequestOutput(otype)
       if err != nil {
          return nil, err

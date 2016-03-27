@@ -49,9 +49,9 @@ func mainClient() {
    opts := goopt.NewMergedSet(genops, cliops)
    args, err := opts.Parse(os.Args)
    if err != nil {
-      usageAndExit(err)
+      mainUsage(err)
    } else if len(args) > 0 {
-      usageAndExit(errors.New("Unparsed arguments: " + strings.Join(args, " ")))
+      mainUsage(errors.New("Unparsed arguments: " + strings.Join(args, " ")))
    }
 
    client, err := ConnectToDBus(*bus)
@@ -96,7 +96,7 @@ func mainClient() {
       return
    }
 
-   usageAndExit(nil)
+   mainUsage(nil)
 }
 
 func dumpOutput(source *os.File) {
