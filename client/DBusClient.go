@@ -49,8 +49,14 @@ func ConnectToDBus(bus string) (*DBusClient, error) {
 	chsig := make(chan *dbus.Signal, 10)
 
 	go func() {
-		for {
-			sig := <-chsig
+		for sig := range chsig {
+			if sig == nil {
+				log.Print("Nil signal???")
+				continue
+			} else if sig.Name == "org.freedesktop.DBus.NameAcquired" {
+				continue
+			}
+
 			ch, ok := c.sigchans[sig.Name]
 			if !ok {
 				log.Print("Unhandled signal: " + sig.Name)
@@ -66,12 +72,17 @@ func ConnectToDBus(bus string) (*DBusClient, error) {
 		}
 	}()
 	c.bus.Signal(chsig)
-	c.bus.BusObject().Call("org.freedesktop.DBus.AddMatch", 0, "type='signal',interface='com.firelizzard.teasvc',member='Pong'")
 
 	return c, nil
 }
 
+func (c *DBusClient) Close() error {
+	return c.bus.Close()
+}
+
 func (c *DBusClient) ListServers(timeout int) chan *ServerInfo {
+	c.bus.BusObject().Call("org.freedesktop.DBus.AddMatch", 0, "type='signal',interface='com.firelizzard.teasvc',member='Pong'")
+
 	if _, ok := c.sigchans["com.firelizzard.teasvc.Pong"]; ok {
 		panic("This client is already pinging")
 	}

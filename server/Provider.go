@@ -7,8 +7,7 @@ import (
 
 type Provider struct {
 	channel chan chan []byte
-	// TODO use CompareAndSwapPointer
-	mutex chan empty
+	mutex   chan empty
 }
 
 func New() *Provider {

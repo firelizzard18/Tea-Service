@@ -22,6 +22,7 @@ func (m *Command) Execute(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	defer cl.Close()
 
 	for server := range cl.ListServers(m.Timeout) {
 		log.Print(server)

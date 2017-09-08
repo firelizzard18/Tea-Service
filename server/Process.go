@@ -47,8 +47,7 @@ func StartProcess(name string, desc string, bus string, arg ...string) (p *Proce
 		return nil, errors.New("Could not open process stderr: " + err.Error())
 	}
 
-	p.exported, err = ExportToDBus(p, bus)
-	if err != nil {
+	if err = ExportToDBus(p, bus); err != nil {
 		return nil, errors.New("Could not open dbus: " + err.Error())
 	}
 
@@ -61,6 +60,10 @@ func StartProcess(name string, desc string, bus string, arg ...string) (p *Proce
 	go p.runOutputListener(errPipe, p.errListeners)
 
 	return
+}
+
+func (p *Process) Cleanup() error {
+	return p.exported.Close()
 }
 
 func (p *Process) runInputProvider(pipe io.Writer, provider *Provider) {

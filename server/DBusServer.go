@@ -10,14 +10,17 @@ import (
 )
 
 type DBusServer struct {
-	proc *Process
-	path dbus.ObjectPath
-	bus  *dbus.Conn
+	proc   *Process
+	path   dbus.ObjectPath
+	bus    *dbus.Conn
+	closed bool
 }
 
-func ExportToDBus(proc *Process, bus string) (*DBusServer, error) {
+func ExportToDBus(proc *Process, bus string) error {
 	s := new(DBusServer)
+	s.closed = false
 	s.proc = proc
+	proc.exported = s
 
 	var err error
 	switch bus {
@@ -32,10 +35,10 @@ func ExportToDBus(proc *Process, bus string) (*DBusServer, error) {
 	}
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !s.bus.SupportsUnixFDs() {
-		return nil, errors.New("DBus connection does not support file descriptors")
+		return errors.New("DBus connection does not support file descriptors")
 	}
 
 	s.path = dbus.ObjectPath("/com/firelizzard/teasvc/Server")
@@ -43,14 +46,22 @@ func ExportToDBus(proc *Process, bus string) (*DBusServer, error) {
 
 	err = s.bus.Export(s, s.path, "com.firelizzard.teasvc.Server")
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	c := s.bus.BusObject().Call("org.freedesktop.DBus.AddMatch", 0, "type='signal',interface='com.firelizzard.teasvc',member='Ping'")
 	if c.Err != nil {
-		return nil, c.Err
+		return c.Err
 	}
-	return s, nil
+	return nil
+}
+
+func (s *DBusServer) Close() error {
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	return s.bus.Close()
 }
 
 func (s *DBusServer) handleSignals() {
@@ -72,6 +83,9 @@ func newError(name string, body ...interface{}) *dbus.Error {
 }
 
 func (s *DBusServer) RequestOutput(sender dbus.Sender, otype byte) (output dbus.UnixFD, derr *dbus.Error) {
+	if s.closed {
+		panic("closed")
+	}
 	output = -1
 
 	outPipe, err := s.proc.RequestOutput(common.OutputType(otype))
@@ -88,6 +102,9 @@ func (s *DBusServer) RequestOutput(sender dbus.Sender, otype byte) (output dbus.
 }
 
 func (s *DBusServer) RequestCommand(sender dbus.Sender, otype byte) (input, output dbus.UnixFD, derr *dbus.Error) {
+	if s.closed {
+		panic("closed")
+	}
 	input = -1
 	output = -1
 
@@ -109,6 +126,9 @@ func (s *DBusServer) RequestCommand(sender dbus.Sender, otype byte) (input, outp
 }
 
 func (s *DBusServer) SendCommand(sender dbus.Sender, otype byte, command string) (output dbus.UnixFD, derr *dbus.Error) {
+	if s.closed {
+		panic("closed")
+	}
 	output = -1
 
 	outPipe, err := s.proc.SendCommand(common.OutputType(otype), command)

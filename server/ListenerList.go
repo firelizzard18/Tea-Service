@@ -5,6 +5,7 @@ import (
 )
 
 type ListenerList struct {
+	// TODO use CompareAndSwapPointer
 	lock *sync.RWMutex
 	head *ListenerNode
 	tail *ListenerNode

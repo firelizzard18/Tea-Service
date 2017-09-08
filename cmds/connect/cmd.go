@@ -27,6 +27,7 @@ func (m *Command) Execute(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	defer cl.Close()
 
 	out, err := cl.RequestOutput(args[0], m.GetOutType())
 	if err != nil {

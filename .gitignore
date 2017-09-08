@@ -3,6 +3,7 @@
 *.a
 *.so
 Tea-Service
+debug
 
 # Folders
 _obj

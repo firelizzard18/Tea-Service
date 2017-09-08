@@ -28,6 +28,7 @@ func (m *Command) Execute(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	defer cl.Close()
 
 	if m.SendCmd != "" {
 		out, err := cl.SendCommand(args[0], m.GetOutType(), m.SendCmd)
