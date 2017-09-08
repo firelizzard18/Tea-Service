@@ -9,7 +9,7 @@ import (
 
 func SetMain(app *cli.App) {
 	cmds := subcmds.NewCollection()
-	cmds.Register("main", "main").Executor(&Command{})
+	cmds.Register("main", "main").Executor(&Command{Bus: "session"})
 
 	main := cmds.Commands()[0]
 	// app.Action = main.Action

@@ -8,6 +8,8 @@ import (
 	"github.com/firelizzard18/Tea-Service/common"
 )
 
+var CmdDefaults = Command{OutType: "both"}
+
 type Command struct {
 	OutType string `long:"out-type" description:"the output type when connecting to a server"`
 }

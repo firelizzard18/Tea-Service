@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	cmds.Register("list", "list available services").Executor(&Command{})
+	cmds.Register("list", "list available services").Executor(&Command{Timeout: 100})
 }
 
 type Command struct {

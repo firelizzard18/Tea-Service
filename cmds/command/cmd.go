@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	cmds.Register("command", "send a command to a service").Executor(&Command{})
+	cmds.Register("command", "send a command to a service").Executor(&Command{Command: client.CmdDefaults})
 }
 
 type Command struct {
