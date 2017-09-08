@@ -16,7 +16,7 @@ func init() {
 
 type Command struct {
 	AsDaemon    bool   `short:"D" long:"daemon,background" description:"run as a daemon in the background"`
-	Description string `short:"d" long:"desc,description" description:"service {description} as presented to clients`
+	Description string `short:"d" long:"desc,description" description:"service {description} as presented to clients"`
 	StdInFile   string `short:"i" long:"input" description:"read stdin from a {file}"`
 	StdOutFile  string `short:"o" long:"output" description:"write stdout to a {file}"`
 	StdErrFile  string `short:"e" long:"error" description:"write stderr to a {file}"`
