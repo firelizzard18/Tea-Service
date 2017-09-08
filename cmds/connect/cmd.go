@@ -15,6 +15,7 @@ func init() {
 
 type Command struct {
 	client.Command
+	Direct bool `short:"n" long:"direct" description:"Use SERVICE as the destination instead of resolving it"`
 }
 
 func (m *Command) Execute(c *cli.Context) error {
@@ -29,7 +30,7 @@ func (m *Command) Execute(c *cli.Context) error {
 	}
 	defer cl.Close()
 
-	out, err := cl.RequestOutput(args[0], m.GetOutType())
+	out, err := cl.RequestOutput(args[0], m.GetOutType(), !m.Direct, 100)
 	if err != nil {
 		return err
 	}

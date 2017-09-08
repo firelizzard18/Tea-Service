@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"log"
 
 	"github.com/godbus/dbus"
@@ -93,6 +94,7 @@ func (s *DBusServer) RequestOutput(sender dbus.Sender, otype byte) (output dbus.
 		derr = newError("com.firelizzard.teasvc.Server.RequestOutputFailure", err.Error())
 		return
 	}
+	fmt.Println("requested output", sender, otype, output, err)
 
 	if outPipe != nil {
 		output = dbus.UnixFD(outPipe.Fd())

@@ -179,10 +179,10 @@ func (p *Process) RequestOutput(otype common.OutputType) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	go func() {
-		time.Sleep(time.Duration(1) * time.Second)
-		outWrite.Close()
-	}()
+	// go func() {
+	// 	time.Sleep(time.Duration(1) * time.Second)
+	// 	outWrite.Close()
+	// }()
 
 	if otype == common.OutputOut || otype == common.OutputAll {
 		p.ConnectOutput(outWrite)

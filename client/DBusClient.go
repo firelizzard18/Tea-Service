@@ -137,7 +137,7 @@ func (c *DBusClient) ListServers(timeout int) chan *ServerInfo {
 	return list
 }
 
-func (c *DBusClient) RequestOutput(dest string, otype common.OutputType) (outPipe *os.File, err error) {
+func (c *DBusClient) RequestOutput(dest string, otype common.OutputType, resolve bool, timeout int) (outPipe *os.File, err error) {
 	var output dbus.UnixFD
 
 	if dest == "" {
@@ -150,7 +150,23 @@ func (c *DBusClient) RequestOutput(dest string, otype common.OutputType) (outPip
 		return
 	}
 
-	obj := c.bus.Object(dest, "/com/firelizzard/teasvc/Server")
+	name := ""
+	if resolve {
+		for server := range c.ListServers(timeout) {
+			if server.Description == dest {
+				name = server.Sender
+				break
+			}
+		}
+		if name == "" {
+			err = errors.New("Could not find server with the specified description")
+			return
+		}
+	} else {
+		name = dest
+	}
+
+	obj := c.bus.Object(name, "/com/firelizzard/teasvc/Server")
 	err = obj.Call("com.firelizzard.teasvc.Server.RequestOutput", 0, byte(otype)).Store(&output)
 	if err != nil {
 		return

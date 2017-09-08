@@ -11,7 +11,7 @@ import (
 var CmdDefaults = Command{OutType: "both"}
 
 type Command struct {
-	OutType string `long:"out-type" description:"the output type when connecting to a server"`
+	OutType string `long:"out-type" description:"the output {type} when connecting to a server (none, out, err, both)"`
 }
 
 func (m *Command) GetOutType() common.OutputType {
