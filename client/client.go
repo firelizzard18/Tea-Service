@@ -8,10 +8,12 @@ import (
 	"github.com/firelizzard18/Tea-Service/common"
 )
 
-var CmdDefaults = Command{OutType: "both"}
+var CmdDefaults = Command{OutType: "both", Timeout: 100}
 
 type Command struct {
 	OutType string `long:"out-type" description:"the output {type} when connecting to a server (none, out, err, both)"`
+	Direct  bool   `short:"n" long:"direct" description:"Use SERVICE as the destination instead of resolving it"`
+	Timeout int    `short:"t" long:"timeout" description:"timeout for listing available servers"`
 }
 
 func (m *Command) GetOutType() common.OutputType {

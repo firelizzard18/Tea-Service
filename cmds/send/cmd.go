@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	cmds.Register("connect", "connect to a service").Executor(&Command{Command: client.CmdDefaults})
+	cmds.Register("send", "send a command to a service").Executor(&Command{Command: client.CmdDefaults})
 }
 
 type Command struct {
@@ -19,8 +19,8 @@ type Command struct {
 
 func (m *Command) Execute(c *cli.Context) error {
 	args := c.Args()
-	if len(args) != 1 {
-		return errors.New("Expected a single argument of the service to connect to")
+	if len(args) != 2 {
+		return errors.New("Expected two arguments of the service to connect to and the command to send")
 	}
 
 	cl, err := client.ConnectToDBus(c.GlobalString("dbus-bus"))
@@ -29,12 +29,11 @@ func (m *Command) Execute(c *cli.Context) error {
 	}
 	defer cl.Close()
 
-	out, err := cl.RequestOutput(args[0], m.GetOutType(), !m.Direct, m.Timeout)
+	out, err := cl.SendCommand(args[0], m.GetOutType(), args[1], !m.Direct, m.Timeout)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
 
-	client.DumpOutput(out)
 	return nil
 }

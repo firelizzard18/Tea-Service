@@ -137,6 +137,20 @@ func (c *DBusClient) ListServers(timeout int) chan *ServerInfo {
 	return list
 }
 
+func (c *DBusClient) Resolve(dest string, resolve bool, timeout int) (string, error) {
+	if !resolve {
+		return dest, nil
+	}
+
+	for server := range c.ListServers(timeout) {
+		if server.Description == dest {
+			return server.Sender, nil
+		}
+	}
+
+	return "", errors.New("Could not find server with the specified description")
+}
+
 func (c *DBusClient) RequestOutput(dest string, otype common.OutputType, resolve bool, timeout int) (outPipe *os.File, err error) {
 	var output dbus.UnixFD
 
@@ -150,20 +164,9 @@ func (c *DBusClient) RequestOutput(dest string, otype common.OutputType, resolve
 		return
 	}
 
-	name := ""
-	if resolve {
-		for server := range c.ListServers(timeout) {
-			if server.Description == dest {
-				name = server.Sender
-				break
-			}
-		}
-		if name == "" {
-			err = errors.New("Could not find server with the specified description")
-			return
-		}
-	} else {
-		name = dest
+	name, err := c.Resolve(dest, resolve, timeout)
+	if err != nil {
+		return
 	}
 
 	obj := c.bus.Object(name, "/com/firelizzard/teasvc/Server")
@@ -179,7 +182,7 @@ func (c *DBusClient) RequestOutput(dest string, otype common.OutputType, resolve
 	return
 }
 
-func (c *DBusClient) RequestCommand(dest string, otype common.OutputType) (inPipe *os.File, outPipe *os.File, err error) {
+func (c *DBusClient) RequestCommand(dest string, otype common.OutputType, resolve bool, timeout int) (inPipe *os.File, outPipe *os.File, err error) {
 	var input, output dbus.UnixFD
 
 	if dest == "" {
@@ -192,7 +195,12 @@ func (c *DBusClient) RequestCommand(dest string, otype common.OutputType) (inPip
 		return
 	}
 
-	obj := c.bus.Object(dest, "/com/firelizzard/teasvc/Server")
+	name, err := c.Resolve(dest, resolve, timeout)
+	if err != nil {
+		return
+	}
+
+	obj := c.bus.Object(name, "/com/firelizzard/teasvc/Server")
 	err = obj.Call("com.firelizzard.teasvc.Server.RequestCommand", 0, byte(otype)).Store(&input, &output)
 	if err != nil {
 		return
@@ -209,7 +217,7 @@ func (c *DBusClient) RequestCommand(dest string, otype common.OutputType) (inPip
 	return
 }
 
-func (c *DBusClient) SendCommand(dest string, otype common.OutputType, command string) (outPipe *os.File, err error) {
+func (c *DBusClient) SendCommand(dest string, otype common.OutputType, command string, resolve bool, timeout int) (outPipe *os.File, err error) {
 	var output dbus.UnixFD
 
 	if dest == "" {
@@ -222,7 +230,12 @@ func (c *DBusClient) SendCommand(dest string, otype common.OutputType, command s
 		return
 	}
 
-	obj := c.bus.Object(dest, "/com/firelizzard/teasvc/Server")
+	name, err := c.Resolve(dest, resolve, timeout)
+	if err != nil {
+		return
+	}
+
+	obj := c.bus.Object(name, "/com/firelizzard/teasvc/Server")
 	err = obj.Call("com.firelizzard.teasvc.Server.SendCommand", 0, byte(otype), command).Store(&output)
 	if err != nil {
 		return

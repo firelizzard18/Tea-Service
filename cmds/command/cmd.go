@@ -15,7 +15,6 @@ func init() {
 
 type Command struct {
 	client.Command
-	SendCmd string `long:"send" description:"send a {command} to a server and connect to it's output"`
 }
 
 func (m *Command) Execute(c *cli.Context) error {
@@ -30,22 +29,14 @@ func (m *Command) Execute(c *cli.Context) error {
 	}
 	defer cl.Close()
 
-	if m.SendCmd != "" {
-		out, err := cl.SendCommand(args[0], m.GetOutType(), m.SendCmd)
-		if err != nil {
-			return err
-		}
-
-		client.DumpOutput(out)
-	} else {
-		in, out, err := cl.RequestCommand(args[0], m.GetOutType())
-		if err != nil {
-			return nil
-		}
-
-		go client.SendInput(in)
-		client.DumpOutput(out)
+	in, out, err := cl.RequestCommand(args[0], m.GetOutType(), !m.Direct, m.Timeout)
+	if err != nil {
+		return nil
 	}
+	defer out.Close()
+
+	go client.SendInput(in)
+	client.DumpOutput(out)
 
 	return nil
 }

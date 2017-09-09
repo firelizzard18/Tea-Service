@@ -11,6 +11,7 @@ import (
 	_ "github.com/firelizzard18/Tea-Service/cmds/interactive"
 	_ "github.com/firelizzard18/Tea-Service/cmds/launch"
 	_ "github.com/firelizzard18/Tea-Service/cmds/list"
+	_ "github.com/firelizzard18/Tea-Service/cmds/send"
 )
 
 func Commands() []cli.Command {
